@@ -23,7 +23,7 @@ redis_client = redis.StrictRedis.from_url(redis_url)
 # Define a GET route
 @app.get("/")
 def read_hello():
-    return {'message': 'Sarkari Result Scraper API', 'version': '1.0'}
+    return {'message': 'Sarkari Result Scraper API', 'version': '1.2'}
 
 
 @app.get("/scrape/admission")
