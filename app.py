@@ -93,7 +93,7 @@ class SarkariResult:
 # Define a GET route
 @app.get("/")
 def read_hello():
-    return {'message': 'Sarkari Result Scraper API', 'version': '1.2'}
+    return {'message': 'Sarkari Result Scraper API', 'version': '1.3'}
 
 
 @app.get("/scrape/{slug}")
