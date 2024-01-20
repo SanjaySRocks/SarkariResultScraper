@@ -4,7 +4,8 @@ import re
 from datetime import datetime
 
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
+from typing import Optional
 
 # Create an instance of the FastAPI class
 app = FastAPI()
@@ -16,23 +17,53 @@ def read_hello():
 
 
 @app.get("/scrape/admission")
-def read_latestjob():
+def read_admission(date: Optional[str] = Query(None, description="Date in format DD/MM/YYYY")):
     try: 
-        response_data = checkSiteFor("admission")
-        return {'totalcount': len(response_data), 'result': response_data}
+
+        if date is None:
+            date = datetime.now().strftime("%d/%m/%Y")
+
+        response_data = checkSiteFor("admission", date)
+
+        return {'totalcount': len(response_data), 'date': date, 'result': response_data}
     except Exception as e:
         return {'error': str(e)}
 
+
 @app.get("/scrape/latestjob")
-def read_latestjob():
+def read_latestjob(date: Optional[str] = Query(None, description="Date in format DD/MM/YYYY")):
     try: 
-        response_data = checkSiteFor("latestjob")
-        return {'totalcount': len(response_data), 'result': response_data}
+
+        if date is None:
+            date = datetime.now().strftime("%d/%m/%Y")
+
+        response_data = checkSiteFor("latestjob", date)
+
+        return {'totalcount': len(response_data), 'date': date, 'result': response_data}
     except Exception as e:
         return {'error': str(e)}
     
 
-def checkSiteFor(slug):
+def compare_dates(date1_str, date2_str):
+    """
+    Compare two date strings.
+
+    Args:
+    - date1_str (str): The first date string in the format '%d/%m/%Y'.
+    - date2_str (str): The second date string in the format '%d/%m/%Y'.
+
+    Returns:
+    - bool: True if date1 is later than date2, False otherwise.
+    """
+
+    # Parse date strings into datetime objects
+    date1 = datetime.strptime(date1_str, "%d/%m/%Y")
+    date2 = datetime.strptime(date2_str, "%d/%m/%Y")
+
+    # Compare dates
+    return date1 >= date2
+
+def checkSiteFor(slug, date_from = None):
 
     try:
         # Making a GET request
@@ -41,15 +72,9 @@ def checkSiteFor(slug):
         # Parsing the HTML
         soup = BeautifulSoup(r.content, 'html.parser')
 
-        # Take Input
-        user_input_date = "19/01/2024"
-        current_date = datetime.strptime(user_input_date, "%d/%m/%Y").date()
-
         # Define a regular expression pattern for date extraction
         date_pattern = re.compile(r'(\d{1,2}/\d{1,2}/\d{4})')
 
-        # Extract data from the HTML
-        i = 0
         post_div = soup.find('div', id='post')
 
         if post_div:
@@ -68,10 +93,7 @@ def checkSiteFor(slug):
                     if date_match:
                         last_date_str = date_match.group(1)
 
-                        #  Convert lastdate string to date object
-                        last_date_obj = datetime.strptime(last_date_str, "%d/%m/%Y").date()
-
-                        if last_date_obj >= current_date:
+                        if compare_dates(last_date_str, date_from):
                             # print(f"Link: {href}\nText: {text}\nLast Date: {last_date_str}\n")
                             dataItem.append({'href': href, 'text': text, 'last_date': last_date_str})
                     else:
@@ -83,3 +105,4 @@ def checkSiteFor(slug):
 
     except Exception as e:
          print(e)
+
