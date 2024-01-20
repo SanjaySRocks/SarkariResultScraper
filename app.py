@@ -1,14 +1,24 @@
+from datetime import datetime
+from os import getenv
 import requests
 from bs4 import BeautifulSoup
 import re
-from datetime import datetime
-
+import redis
+import json
 
 from fastapi import FastAPI, Query
 from typing import Optional
+from dotenv import load_dotenv, find_dotenv
+
+# find the .env file and load it 
+load_dotenv(find_dotenv())
+redis_url = getenv("REDIS_URL")
 
 # Create an instance of the FastAPI class
 app = FastAPI()
+
+redis_client = redis.StrictRedis.from_url(redis_url)
+
 
 # Define a GET route
 @app.get("/")
@@ -23,7 +33,15 @@ def read_admission(date: Optional[str] = Query(None, description="Date in format
         if date is None:
             date = datetime.now().strftime("%d/%m/%Y")
 
-        response_data = checkSiteFor("admission", date)
+        redis_key = f"admission:{date}"
+        cached_data = redis_client.get(redis_key)
+
+        if cached_data:
+            print("Cache Result Sent for ", redis_key)
+            response_data = json.loads(cached_data.decode('utf-8'))
+        else:
+            response_data = checkSiteFor("admission", date)
+            redis_client.setex(redis_key, 300, json.dumps(response_data))
 
         return {'totalcount': len(response_data), 'date': date, 'result': response_data}
     except Exception as e:
@@ -37,7 +55,15 @@ def read_latestjob(date: Optional[str] = Query(None, description="Date in format
         if date is None:
             date = datetime.now().strftime("%d/%m/%Y")
 
-        response_data = checkSiteFor("latestjob", date)
+        redis_key = f"latestjob:{date}"
+        cached_data = redis_client.get(redis_key)
+
+        if cached_data:
+            print("Cache Result Sent for ", redis_key)            
+            response_data = json.loads(cached_data.decode('utf-8'))
+        else:
+            response_data = checkSiteFor("admission", date)
+            redis_client.setex(redis_key, 300, json.dumps(response_data))
 
         return {'totalcount': len(response_data), 'date': date, 'result': response_data}
     except Exception as e:
