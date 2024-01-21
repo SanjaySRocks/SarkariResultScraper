@@ -22,7 +22,7 @@ redis_client = redis.StrictRedis.from_url(redis_url)
 class SarkariResult:
 
     def __init__(self):
-        pass
+        self.dataItem = []
 
     def compare_dates(self, date1_str, date2_str):
         """
@@ -44,7 +44,7 @@ class SarkariResult:
         return date1 >= date2
 
 
-    def Scrape(self, slug, date_from = None):
+    def Scrape(self, slug):
         try:
             # Making a GET request
             r = requests.get(f'https://www.sarkariresult.com/{slug}/')
@@ -58,63 +58,62 @@ class SarkariResult:
             post_div = soup.find('div', id='post')
 
             if post_div:
-                dataItem = []
                 for ul in post_div.find_all('ul'):
                     item = ul.find('a')
                     
                     if item:
                         href = item['href']
+                        # text without date
                         text = item.get_text(strip=True)
 
-                        # Search for the date pattern in the list item text
+                        # text with date 
                         date_match = date_pattern.search(ul.get_text(strip=True))
-
-                        # Check if date exists
-                        if date_match:
-                            last_date_str = date_match.group(1)
-
-                            if self.compare_dates(last_date_str, date_from):
-                                # print(f"Link: {href}\nText: {text}\nLast Date: {last_date_str}\n")
-                                dataItem.append({'href': href, 'text': text, 'last_date': last_date_str})
-                        else:
-                            # print(f"Link: {href}\nText: {text}\nLast Date: No Date Found\n")
-                            dataItem.append({'href': href, 'text': text, 'last_date': None})
-                return dataItem
-            else:
-                return []
-
+                        self.dataItem.append({'href': href, 'text': text, 'last_date': date_match.group(1)} if date_match else {'href': href, 'text': text})
+            return self
         except Exception as e:
             print(e)
-
-
         
+
+    def filterDate(self, date_from = None):
+        self.dataItem = [
+            item for item in self.dataItem 
+            if 'last_date' not in item or (item.get('last_date') and self.compare_dates(item.get('last_date'), date_from))
+        ]
+
+        return self
 
 
 # Define a GET route
 @app.get("/")
 def read_hello():
-    return {'message': 'Sarkari Result Scraper API', 'version': '1.3'}
+    return {'message': 'Sarkari Result Scraper API', 'version': '1.4'}
 
 
 @app.get("/scrape/{slug}")
-def read_admission(slug:str, date: Optional[str] = Query(None, description="Date in format DD/MM/YYYY")):
+def scrape_endpoint(slug:str, date: Optional[str] = Query(None, description="Date in format DD/MM/YYYY")):
     
-    if slug not in {"latestjob", "admission"}:
+    if slug not in {"latestjob", "admission", "admitcard","syllabus","answerkey","result"}:
         return {'error': "Invalid Endpoint"}
     
     try: 
-        if date is None:
-            date = datetime.now().strftime("%d/%m/%Y")
+        # if date is None:
+        #     date = datetime.now().strftime("%d/%m/%Y")
 
-        redis_key = f"{slug}:{date}"
+        redis_key = f"{slug}:{date}" if date else slug
         cached_data = redis_client.get(redis_key)
 
         if cached_data:
-            print("Cache Result Sent for ", redis_key)
+            print("Cache Get ", redis_key)
             response_data = json.loads(cached_data.decode('utf-8'))
         else:
+            sarkari_instance = SarkariResult()
+            sarkari_instance = sarkari_instance.Scrape(slug)
 
-            response_data = SarkariResult().Scrape(slug, date)
+            if date:
+                sarkari_instance = sarkari_instance.filterDate(date)
+
+            response_data = sarkari_instance.dataItem
+
             redis_client.setex(redis_key, 300, json.dumps(response_data))
 
         return {'totalcount': len(response_data), 'date': date, 'result': response_data}
