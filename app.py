@@ -12,12 +12,15 @@ from dotenv import load_dotenv, find_dotenv
 
 # find the .env file and load it 
 load_dotenv(find_dotenv())
+
+redis_enable = 0
 redis_url = getenv("REDIS_URL")
 
 # Create an instance of the FastAPI class
 app = FastAPI()
 
-redis_client = redis.StrictRedis.from_url(redis_url)
+if redis_enable:
+    redis_client = redis.StrictRedis.from_url(redis_url)
 
 class SarkariResult:
 
@@ -100,9 +103,11 @@ def scrape_endpoint(slug:str, date: Optional[str] = Query(None, description="Dat
         #     date = datetime.now().strftime("%d/%m/%Y")
 
         redis_key = f"{slug}:{date}" if date else slug
-        cached_data = redis_client.get(redis_key)
 
-        if cached_data:
+        if redis_enable:
+            cached_data = redis_client.get(redis_key)
+
+        if redis_enable and cached_data:
             print("Cache Get ", redis_key)
             response_data = json.loads(cached_data.decode('utf-8'))
         else:
@@ -114,7 +119,8 @@ def scrape_endpoint(slug:str, date: Optional[str] = Query(None, description="Dat
 
             response_data = sarkari_instance.dataItem
 
-            redis_client.setex(redis_key, 300, json.dumps(response_data))
+            if redis_enable:
+                redis_client.setex(redis_key, 300, json.dumps(response_data))
 
         return {'totalcount': len(response_data), 'date': date, 'result': response_data}
     except Exception as e:
